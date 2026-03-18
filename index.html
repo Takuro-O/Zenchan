@@ -331,7 +331,7 @@
 <!-- ADD MODAL -->
 <div id="add-modal" style="display:none;position:fixed;inset:0;z-index:200;align-items:flex-end;justify-content:center;">
   <div class="overlay-bg" onclick="closeAddModal()"></div>
-  <div style="position:relative;width:100%;max-width:430px;background:var(--c-bg);border-radius:var(--radius-l) var(--radius-l) 0 0;padding:24px 16px calc(24px + env(safe-area-inset-bottom));max-height:93dvh;overflow-y:auto;box-shadow:var(--shadow-modal);animation:slideUp 0.26s ease;">
+  <div id="add-sheet" style="position:relative;width:100%;max-width:430px;background:var(--c-bg);border-radius:var(--radius-l) var(--radius-l) 0 0;padding:24px 16px calc(24px + env(safe-area-inset-bottom));max-height:93dvh;overflow-y:auto;box-shadow:var(--shadow-modal);animation:slideUp 0.26s ease;transition:transform 0.22s ease,opacity 0.22s ease;touch-action:pan-y;">
     <div style="width:36px;height:4px;background:#e0d4cd;border-radius:2px;margin:0 auto 20px;"></div>
     <h2 style="font-size:17px;font-weight:700;margin-bottom:16px;">📸 写真を登録</h2>
 
@@ -581,20 +581,78 @@ function openAddModal(){
   const btn=document.getElementById('save-btn');
   btn.disabled=true; btn.textContent='写真を選んでください';
   btn.style.background='#e5d5cc'; btn.style.color='#b8a09a';
+  /* FIX1: 前回のスワイプ中断で残ったスタイルをリセット */
+  const sheet=document.getElementById('add-sheet');
+  sheet.style.transition=''; sheet.style.transform=''; sheet.style.opacity='';
   document.getElementById('add-modal').style.display='flex';
   document.body.style.overflow='hidden';
 }
-function closeAddModal(){ document.getElementById('add-modal').style.display='none'; document.body.style.overflow=''; }
+function closeAddModal(){
+  const sheet = document.getElementById('add-sheet');
+  sheet.style.transition = 'transform 0.24s ease, opacity 0.24s ease';
+  sheet.style.transform  = 'translateY(100%)';
+  sheet.style.opacity    = '0';
+  setTimeout(() => {
+    document.getElementById('add-modal').style.display = 'none';
+    sheet.style.transition = '';
+    sheet.style.transform  = '';
+    sheet.style.opacity    = '';
+    document.body.style.overflow = '';
+  }, 240);
+}
+
+/* add-sheet スワイプ下で閉じる（スクロール最上部のみ発動） */
+(()=>{
+  const sheet = document.getElementById('add-sheet');
+  let sy = 0, dy = 0, dragging = false;
+
+  function snapBack() {
+    sheet.style.transition = 'transform 0.22s ease, opacity 0.22s ease';
+    sheet.style.transform  = '';
+    sheet.style.opacity    = '';
+    dragging = false; dy = 0;
+  }
+
+  sheet.addEventListener('touchstart', e => {
+    if (sheet.scrollTop > 0) return;
+    sy = e.touches[0].clientY;
+    dy = 0; dragging = true;
+  }, { passive: true });
+
+  sheet.addEventListener('touchmove', e => {
+    if (!dragging) return;
+    if (sheet.scrollTop > 0) { dragging = false; return; }
+    dy = e.touches[0].clientY - sy;
+    if (dy <= 0) return;
+    sheet.style.transition = 'none';
+    sheet.style.transform  = `translateY(${dy}px)`;
+    sheet.style.opacity = String(Math.max(0, 1 - dy / 400));
+  }, { passive: true });
+
+  sheet.addEventListener('touchend', () => {
+    if (!dragging) return;
+    if (dy >= 120) { dragging = false; dy = 0; closeAddModal(); }
+    else snapBack();
+  });
+
+  /* FIX4: OS割り込みでタッチがキャンセルされたときもスナップバック */
+  sheet.addEventListener('touchcancel', () => {
+    if (dragging) snapBack();
+  });
+})();
 
 function savePhoto(){
   if(!pendingDataUrl){ toast('📷 写真を選択してください'); return; }
+  /* FIX3: 未来日付チェック */
+  const dateVal = document.getElementById('inp-date').value || todayStr();
+  if (dateVal > todayStr()) { toast('⚠️ 日付は今日以前にしてください'); return; }
   const btn=document.getElementById('save-btn');
   btn.disabled=true; btn.textContent='保存中…'; btn.style.opacity='0.6';
   setTimeout(()=>{
-    state.photos.push({ id:Date.now(), dateStr:document.getElementById('inp-date').value||todayStr(), dataUrl:pendingDataUrl, memo:document.getElementById('inp-memo').value.trim(), tags:[...selectedTags] });
-    persist(); closeAddModal();
-    btn.disabled=false; btn.textContent='保存する'; btn.style.opacity='1';
+    state.photos.push({ id:Date.now(), dateStr:dateVal, dataUrl:pendingDataUrl, memo:document.getElementById('inp-memo').value.trim(), tags:[...selectedTags] });
+    persist();
     haptic('heavy'); toast('✅ 保存しました！'); render();
+    closeAddModal(); /* FIX2: btn リセットは openAddModal に任せ、ここでは触らない */
   },80);
 }
 
