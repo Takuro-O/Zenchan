@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#ffffff">
+  <title>おそだちノート</title>
+  <style>
+    :root {
+      --c-bg:        #ffffff;
+      --c-surface:   #fdf8f5;
+      --c-border:    #f0e5dc;
+      --c-text:      #2d1e17;
+      --c-sub:       #9d7d6e;
+      --c-primary:   #f97316;
+      --c-primary-d: #ea6c0a;
+      --c-primary-l: #fff7ed;
+      --c-warm:      #fde8d2;
+      --c-danger:    #ef4444;
+      --radius-s:    8px;
+      --radius-m:    12px;
+      --radius-l:    20px;
+      --shadow-card: 0 1px 6px rgba(249,115,22,0.08);
+      --shadow-modal:0 -4px 32px rgba(0,0,0,0.13);
+      --transition:  0.18s ease;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      background: var(--c-bg); color: var(--c-text);
+      font-size: 16px; line-height: 1.6;
+      -webkit-text-size-adjust: 100%;
+      overscroll-behavior: none;
+    }
+    #app {
+      max-width: 430px; margin: 0 auto;
+      min-height: 100dvh; display: flex; flex-direction: column;
+    }
+    button { font-family: inherit; cursor: pointer; touch-action: manipulation; }
+    input, textarea, select { font-family: inherit; font-size: 16px; }
+
+    /* tap feedback */
+    .tappable {
+      transition: transform var(--transition), opacity var(--transition);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .tappable:active { transform: scale(0.97); opacity: 0.82; }
+
+    /* page transitions */
+    .page { display: none; }
+    .page.active {
+      display: block;
+      animation: pageFadeIn 0.18s ease both;
+    }
+    @keyframes pageFadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+
+    /* nav */
+    .nav-btn { color: var(--c-sub); transition: color var(--transition); }
+    .nav-btn.active { color: var(--c-primary) !important; }
+    .nav-pip {
+      width: 4px; height: 4px; border-radius: 50%;
+      background: transparent; margin: 1px auto 0;
+      transition: background var(--transition), width var(--transition);
+    }
+    .nav-btn.active .nav-pip { background: var(--c-primary); width: 20px; border-radius: 2px; }
+
+    /* 2-col grid */
+    .photo-grid-2 { display:grid; grid-template-columns:repeat(2,1fr); gap:3px; padding:0 3px; }
+    /* 3-col grid */
+    .photo-grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:2px; }
+    .photo-item { position:relative; aspect-ratio:1; overflow:hidden; cursor:pointer; background:var(--c-surface); }
+    .photo-item img { width:100%; height:100%; object-fit:cover; display:block; }
+
+    /* timeline */
+    .tl-card {
+      background:var(--c-bg); border:1px solid var(--c-border);
+      border-radius:var(--radius-m); overflow:hidden;
+      margin:0 16px 12px; box-shadow:var(--shadow-card); cursor:pointer;
+    }
+    .tl-img { width:100%; aspect-ratio:4/3; object-fit:cover; display:block; }
+
+    /* sticky month header */
+    .month-hd {
+      position:sticky; top:0; z-index:10;
+      font-size:13px; font-weight:700; color:var(--c-sub);
+      padding:10px 16px 7px;
+      background:rgba(255,255,255,0.92); backdrop-filter:blur(8px);
+      border-bottom:1px solid var(--c-border);
+      letter-spacing:0.03em;
+    }
+
+    /* chips */
+    .chip {
+      display:inline-flex; align-items:center; gap:3px;
+      padding:5px 13px; border-radius:20px;
+      font-size:12px; font-weight:600;
+      background:var(--c-warm); color:var(--c-primary);
+      border:1.5px solid transparent;
+      cursor:pointer; white-space:nowrap;
+      -webkit-tap-highlight-color:transparent;
+      transition:background var(--transition),color var(--transition),transform var(--transition);
+    }
+    .chip.on  { background:var(--c-primary); color:#fff; }
+    .chip:active { transform:scale(0.95); }
+
+    /* filter row with right fade */
+    .filter-row-wrap { position:relative; }
+    .filter-row { padding:12px 16px 10px; display:flex; gap:8px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .filter-row-wrap::after {
+      content:''; pointer-events:none;
+      position:absolute; top:0; right:0; bottom:0; width:40px;
+      background:linear-gradient(to right,transparent,var(--c-bg));
+    }
+
+    /* compare slots */
+    .cslot {
+      flex:1; aspect-ratio:3/4;
+      border:2px dashed var(--c-border);
+      border-radius:var(--radius-m); overflow:hidden;
+      display:flex; align-items:center; justify-content:center;
+      cursor:pointer; background:var(--c-surface); position:relative;
+      transition:border-color var(--transition);
+    }
+    .cslot.filled { border-style:solid; border-color:var(--c-primary); }
+
+    /* modal */
+    .overlay-bg { position:absolute; inset:0; background:rgba(0,0,0,0.48); }
+    ::-webkit-scrollbar { display:none; }
+    * { scrollbar-width:none; }
+
+    /* toast */
+    #toast {
+      display:none; position:fixed;
+      bottom:calc(90px + env(safe-area-inset-bottom));
+      left:50%; transform:translateX(-50%);
+      background:rgba(45,30,20,0.88); color:#fff;
+      padding:10px 22px; border-radius:24px;
+      font-size:14px; font-weight:500;
+      z-index:999; white-space:nowrap;
+    }
+    @keyframes toastFade {
+      0%{opacity:0;transform:translateX(-50%) translateY(6px)}
+      12%{opacity:1;transform:translateX(-50%) translateY(0)}
+      80%{opacity:1} 100%{opacity:0}
+    }
+
+    /* memory strip */
+    .memory-strip {
+      background:linear-gradient(135deg,#fffbeb,#fef3c7,#fde68a20);
+      border-bottom:1px solid #f8d76a40;
+      padding:14px 16px; margin-top:16px;
+    }
+    .memory-scroll { display:flex; gap:10px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:4px; }
+    .memory-card {
+      flex:0 0 auto; width:110px; border-radius:10px; overflow:hidden;
+      box-shadow:0 2px 10px rgba(0,0,0,0.12); cursor:pointer;
+      -webkit-tap-highlight-color:transparent; transition:var(--transition);
+    }
+    .memory-card:active { transform:scale(0.96); }
+    .memory-card img { width:110px; height:82px; object-fit:cover; display:block; }
+    .memory-badge { background:#f59e0b; color:#fff; text-align:center; padding:3px 0; font-size:11px; font-weight:700; }
+
+    /* stat bar */
+    .stat-bar { display:flex; padding:14px 16px; border-bottom:1px solid var(--c-border); }
+    .stat-item { flex:1; text-align:center; }
+    .stat-num { font-size:22px; font-weight:700; color:var(--c-primary); line-height:1; }
+    .stat-lbl { font-size:11px; color:var(--c-sub); margin-top:2px; }
+
+    /* save btn disabled */
+    #save-btn:disabled { background:#e5d5cc !important; color:#b8a09a !important; cursor:not-allowed; transform:none !important; opacity:1 !important; }
+
+    /* step indicator */
+    .step-num {
+      width:22px; height:22px; border-radius:50%;
+      background:var(--c-primary); color:#fff;
+      font-size:11px; font-weight:700;
+      display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    }
+    .step-num.done { background:#22c55e; }
+
+    @keyframes slideUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+    @keyframes fadeIn  { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER -->
+  <header style="position:sticky;top:0;z-index:100;background:rgba(255,255,255,0.93);backdrop-filter:blur(14px);border-bottom:1px solid var(--c-border);padding:0 16px;height:56px;display:flex;align-items:center;justify-content:space-between;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="font-size:22px;">🌱</span>
+      <h1 id="header-title" style="font-size:17px;font-weight:700;letter-spacing:-0.01em;">おそだちノート</h1>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button id="sort-btn" class="tappable" onclick="toggleSort()" style="display:none;padding:5px 13px;border:1.5px solid var(--c-border);border-radius:20px;background:none;font-size:13px;color:var(--c-sub);">新しい順 ▾</button>
+      <button class="tappable" onclick="openProfileModal()" aria-label="設定" style="width:36px;height:36px;border-radius:50%;background:var(--c-surface);border:1.5px solid var(--c-border);font-size:17px;display:flex;align-items:center;justify-content:center;">⚙️</button>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main style="flex:1;overflow-y:auto;padding-bottom:calc(72px + env(safe-area-inset-bottom));">
+
+    <!-- HOME -->
+    <div id="page-home" class="page active">
+      <div id="profile-card" style="display:none;margin:16px 16px 0;background:linear-gradient(135deg,#fff7ed,#fde8d2);border:1.5px solid var(--c-border);border-radius:var(--radius-l);padding:18px;box-shadow:var(--shadow-card);">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <div style="width:52px;height:52px;border-radius:50%;background:var(--c-primary);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;box-shadow:0 3px 12px rgba(249,115,22,0.28);">👶</div>
+          <div style="flex:1;min-width:0;">
+            <div id="pc-name" style="font-size:18px;font-weight:700;letter-spacing:-0.01em;"></div>
+            <div id="pc-age-main" style="font-size:13px;color:var(--c-sub);margin-top:1px;"></div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div id="pc-days" style="font-size:28px;font-weight:800;color:var(--c-primary);line-height:1;"></div>
+            <div id="pc-days-lbl" style="font-size:11px;color:var(--c-sub);margin-top:2px;"></div>
+          </div>
+        </div>
+        <div id="pc-milestones" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;"></div>
+      </div>
+
+      <!-- nudge (display controlled by JS only) -->
+      <div id="profile-nudge" style="display:none;margin:16px 16px 0;background:var(--c-primary-l);border:1.5px dashed rgba(249,115,22,0.35);border-radius:var(--radius-m);padding:14px 16px;align-items:center;gap:12px;cursor:pointer;" onclick="openProfileModal()">
+        <span style="font-size:26px;">👶</span>
+        <div>
+          <p style="font-size:14px;font-weight:700;color:var(--c-primary);">お子さんの情報を登録しよう</p>
+          <p style="font-size:12px;color:var(--c-sub);margin-top:1px;">名前と誕生日で生後日数が表示されます</p>
+        </div>
+        <span style="margin-left:auto;color:var(--c-primary);font-size:18px;">›</span>
+      </div>
+
+      <div id="home-memory"></div>
+
+      <div id="home-stats" style="display:none;">
+        <div class="stat-bar">
+          <div class="stat-item"><div class="stat-num" id="stat-total">0</div><div class="stat-lbl">合計写真</div></div>
+          <div class="stat-item" style="border-left:1px solid var(--c-border);"><div class="stat-num" id="stat-days">0</div><div class="stat-lbl">記録した日</div></div>
+          <div class="stat-item" style="border-left:1px solid var(--c-border);"><div class="stat-num" id="stat-months">0</div><div class="stat-lbl">ヶ月分</div></div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 6px;">
+        <p style="font-size:13px;font-weight:600;color:var(--c-sub);">最近の記録</p>
+        <button class="tappable" id="see-all-btn" onclick="showPage('timeline')" style="display:none;font-size:13px;color:var(--c-primary);font-weight:600;background:none;border:none;padding:0;">すべて見る ›</button>
+      </div>
+      <div id="home-grid" class="photo-grid-2"></div>
+      <div id="home-empty" style="display:none;text-align:center;padding:72px 24px 32px;">
+        <div style="font-size:56px;margin-bottom:16px;">👶</div>
+        <p style="font-size:17px;font-weight:700;margin-bottom:8px;">まだ写真がありません</p>
+        <p style="font-size:14px;color:var(--c-sub);">右下の ＋ から最初の一枚を登録しましょう 🌱</p>
+      </div>
+    </div>
+
+    <!-- TIMELINE -->
+    <div id="page-timeline" class="page">
+      <div class="filter-row-wrap">
+        <div class="filter-row">
+          <button class="chip on" data-flt="all"      onclick="setFilter('all',this)">すべて</button>
+          <button class="chip"    data-flt="初めて"   onclick="setFilter('初めて',this)">⭐ 初めて</button>
+          <button class="chip"    data-flt="日常"     onclick="setFilter('日常',this)">☀️ 日常</button>
+          <button class="chip"    data-flt="イベント" onclick="setFilter('イベント',this)">🎉 イベント</button>
+        </div>
+      </div>
+      <div id="tl-list"></div>
+      <div id="tl-empty" style="display:none;text-align:center;padding:64px 24px;color:var(--c-sub);">
+        <div style="font-size:44px;margin-bottom:14px;">🔍</div>
+        <p style="font-size:16px;font-weight:600;color:var(--c-text);margin-bottom:6px;">写真が見つかりません</p>
+        <p style="font-size:14px;">別のタグで試してみましょう</p>
+      </div>
+    </div>
+
+    <!-- COMPARE -->
+    <div id="page-compare" class="page">
+      <div style="padding:16px 16px 0;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+          <div class="step-num" id="step1-num">1</div>
+          <p style="font-size:13px;font-weight:600;color:var(--c-sub);">比べたい写真を2枚選ぶ</p>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:16px;">
+          <div id="cslot-0" class="cslot tappable" onclick="openCmpPicker(0)">
+            <div style="text-align:center;color:var(--c-sub);padding:16px;">
+              <div style="font-size:36px;margin-bottom:6px;color:var(--c-border);">＋</div>
+              <p style="font-size:12px;font-weight:600;">1枚目</p>
+            </div>
+          </div>
+          <div id="cslot-1" class="cslot tappable" onclick="openCmpPicker(1)">
+            <div style="text-align:center;color:var(--c-sub);padding:16px;">
+              <div style="font-size:36px;margin-bottom:6px;color:var(--c-border);">＋</div>
+              <p style="font-size:12px;font-weight:600;">2枚目</p>
+            </div>
+          </div>
+        </div>
+        <div id="cmp-result" style="display:none;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <div class="step-num done">✓</div>
+            <p style="font-size:13px;font-weight:600;color:var(--c-sub);">成長の記録</p>
+          </div>
+          <div style="background:var(--c-primary-l);border-radius:var(--radius-m);padding:18px;text-align:center;">
+            <p style="font-size:12px;color:var(--c-sub);margin-bottom:4px;">📏 この2枚の差</p>
+            <p id="cmp-diff-val" style="font-size:28px;font-weight:800;color:var(--c-primary);line-height:1.2;"></p>
+            <p id="cmp-dates-val" style="font-size:12px;color:var(--c-sub);margin-top:6px;"></p>
+          </div>
+        </div>
+      </div>
+      <div id="cmp-empty" style="display:none;text-align:center;padding:48px 24px;color:var(--c-sub);">
+        <div style="font-size:44px;margin-bottom:12px;">📷</div>
+        <p style="font-size:15px;font-weight:600;color:var(--c-text);margin-bottom:6px;">まだ写真がありません</p>
+        <p style="font-size:13px;">写真を登録してから使ってみましょう</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- BOTTOM NAV -->
+  <nav style="position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:rgba(255,255,255,0.96);backdrop-filter:blur(14px);border-top:1px solid var(--c-border);display:flex;padding-bottom:env(safe-area-inset-bottom);z-index:100;">
+    <button class="nav-btn tappable active" data-page="home" onclick="showPage('home')" style="flex:1;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;background:none;border:none;font-size:10px;">
+      <span style="font-size:22px;">🏠</span><span>ホーム</span><div class="nav-pip"></div>
+    </button>
+    <button class="nav-btn tappable" data-page="timeline" onclick="showPage('timeline')" style="flex:1;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;background:none;border:none;font-size:10px;">
+      <span style="font-size:22px;">📅</span><span>タイムライン</span><div class="nav-pip"></div>
+    </button>
+    <button class="nav-btn tappable" data-page="compare" onclick="showPage('compare')" style="flex:1;height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;background:none;border:none;font-size:10px;">
+      <span style="font-size:22px;">⚖️</span><span>くらべる</span><div class="nav-pip"></div>
+    </button>
+  </nav>
+</div>
+
+<!-- FAB -->
+<button id="fab" class="tappable" onclick="openAddModal();haptic()" aria-label="写真を追加" style="position:fixed;bottom:calc(76px + env(safe-area-inset-bottom));right:20px;width:58px;height:58px;border-radius:50%;background:var(--c-primary);color:#fff;border:none;font-size:30px;line-height:1;box-shadow:0 4px 20px rgba(249,115,22,0.42);z-index:90;transition:opacity 0.2s,transform 0.2s;">＋</button>
+
+<!-- ADD MODAL -->
+<div id="add-modal" style="display:none;position:fixed;inset:0;z-index:200;align-items:flex-end;justify-content:center;">
+  <div class="overlay-bg" onclick="closeAddModal()"></div>
+  <div style="position:relative;width:100%;max-width:430px;background:var(--c-bg);border-radius:var(--radius-l) var(--radius-l) 0 0;padding:24px 16px calc(24px + env(safe-area-inset-bottom));max-height:93dvh;overflow-y:auto;box-shadow:var(--shadow-modal);animation:slideUp 0.26s ease;">
+    <div style="width:36px;height:4px;background:#e0d4cd;border-radius:2px;margin:0 auto 20px;"></div>
+    <h2 style="font-size:17px;font-weight:700;margin-bottom:16px;">📸 写真を登録</h2>
+
+    <div id="photo-area" class="tappable" onclick="useLibrary()" style="width:100%;aspect-ratio:4/3;background:var(--c-surface);border:2px dashed var(--c-border);border-radius:var(--radius-m);display:flex;flex-direction:column;align-items:center;justify-content:center;margin-bottom:10px;overflow:hidden;cursor:pointer;position:relative;transition:border-color var(--transition);">
+      <img id="preview-img" src="" alt="プレビュー" style="display:none;width:100%;height:100%;object-fit:cover;position:absolute;inset:0;">
+      <div id="photo-ph" style="text-align:center;color:var(--c-sub);padding:16px;pointer-events:none;">
+        <div style="font-size:44px;margin-bottom:8px;">📷</div>
+        <p style="font-size:14px;font-weight:600;">タップして写真を選択</p>
+        <p style="font-size:12px;margin-top:3px;">カメラ / ライブラリから選べます</p>
+      </div>
+    </div>
+    <input type="file" id="file-input" accept="image/*" style="display:none;" onchange="onFileSelected(this)">
+
+    <div style="display:flex;gap:8px;margin-bottom:18px;">
+      <button class="tappable" onclick="useCamera()" style="flex:1;height:40px;background:var(--c-surface);border:1px solid var(--c-border);border-radius:var(--radius-s);font-size:13px;font-weight:500;color:var(--c-text);">📷 カメラ</button>
+      <button class="tappable" onclick="useLibrary()" style="flex:1;height:40px;background:var(--c-surface);border:1px solid var(--c-border);border-radius:var(--radius-s);font-size:13px;font-weight:500;color:var(--c-text);">🖼️ ライブラリ</button>
+    </div>
+
+    <div style="margin-bottom:16px;">
+      <label style="display:block;font-size:13px;font-weight:600;color:var(--c-sub);margin-bottom:5px;">日付</label>
+      <input type="date" id="inp-date" style="width:100%;height:44px;padding:0 12px;border:1.5px solid var(--c-border);border-radius:var(--radius-s);background:var(--c-bg);color:var(--c-text);">
+    </div>
+
+    <div style="margin-bottom:16px;">
+      <label style="display:block;font-size:13px;font-weight:600;color:var(--c-sub);margin-bottom:5px;">一言メモ <span style="font-weight:400;">（任意）</span></label>
+      <textarea id="inp-memo" rows="2" placeholder="例：初めて一人で立った！" style="width:100%;padding:10px 12px;border:1.5px solid var(--c-border);border-radius:var(--radius-s);background:var(--c-bg);color:var(--c-text);resize:none;line-height:1.5;"></textarea>
+    </div>
+
+    <div style="margin-bottom:24px;">
+      <label style="display:block;font-size:13px;font-weight:600;color:var(--c-sub);margin-bottom:8px;">タグ <span style="font-weight:400;">（任意）</span></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;" id="tag-sel">
+        <button class="chip" data-tag="初めて"   onclick="toggleTag('初めて',this)">⭐ 初めて</button>
+        <button class="chip" data-tag="日常"     onclick="toggleTag('日常',this)">☀️ 日常</button>
+        <button class="chip" data-tag="イベント" onclick="toggleTag('イベント',this)">🎉 イベント</button>
+      </div>
+    </div>
+
+    <button class="tappable" id="save-btn" onclick="savePhoto()" disabled style="width:100%;height:50px;background:#e5d5cc;color:#b8a09a;border:none;border-radius:var(--radius-s);font-size:16px;font-weight:700;transition:background var(--transition),color var(--transition);">写真を選んでください</button>
+  </div>
+</div>
+
+<!-- DETAIL MODAL -->
+<div id="detail-modal" style="display:none;position:fixed;inset:0;z-index:200;background:#000;flex-direction:column;overflow:hidden;">
+
+  <!-- 上部バー -->
+  <div style="position:absolute;top:0;left:0;right:0;z-index:10;background:linear-gradient(rgba(0,0,0,0.55),transparent);padding:calc(16px + env(safe-area-inset-top)) 16px 40px;display:flex;justify-content:space-between;align-items:center;">
+    <button class="tappable" onclick="closeDetail()" aria-label="閉じる" style="background:rgba(0,0,0,0.4);border:none;color:#fff;width:38px;height:38px;border-radius:50%;font-size:18px;display:flex;align-items:center;justify-content:center;">✕</button>
+    <div style="text-align:center;">
+      <span id="det-date" style="color:#fff;font-size:14px;font-weight:600;display:block;"></span>
+      <span id="det-age-badge" style="color:rgba(255,255,255,0.75);font-size:12px;"></span>
+    </div>
+    <button class="tappable" onclick="deletePhoto()" aria-label="削除" style="background:rgba(0,0,0,0.4);border:none;color:#fff;width:38px;height:38px;border-radius:50%;font-size:18px;display:flex;align-items:center;justify-content:center;">🗑️</button>
+  </div>
+
+  <!-- スワイプヒント pill + カウンター -->
+  <div style="position:absolute;top:calc(8px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:11;display:flex;flex-direction:column;align-items:center;gap:5px;">
+    <div style="width:36px;height:4px;background:rgba(255,255,255,0.35);border-radius:2px;"></div>
+    <span id="det-counter" style="color:rgba(255,255,255,0.6);font-size:11px;font-weight:600;letter-spacing:0.05em;"></span>
+  </div>
+
+  <!-- 左右ナビ矢印（タップでも切り替え可） -->
+  <button id="det-prev" onclick="navigateDetail(-1)" aria-label="前の写真" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);z-index:10;background:rgba(0,0,0,0.32);border:none;color:#fff;width:40px;height:40px;border-radius:50%;font-size:20px;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;transition:opacity 0.2s;">‹</button>
+  <button id="det-next" onclick="navigateDetail(1)"  aria-label="次の写真"  style="position:absolute;right:8px;top:50%;transform:translateY(-50%);z-index:10;background:rgba(0,0,0,0.32);border:none;color:#fff;width:40px;height:40px;border-radius:50%;font-size:20px;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;transition:opacity 0.2s;">›</button>
+
+  <!-- スライドするコンテナ -->
+  <div id="det-slide" style="width:100%;height:100dvh;display:flex;align-items:center;justify-content:center;will-change:transform;">
+    <img id="det-img" src="" alt="写真" style="width:100%;height:100dvh;object-fit:contain;display:block;pointer-events:none;">
+  </div>
+
+  <!-- 下部情報 -->
+  <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,0.72));padding:40px 16px calc(16px + env(safe-area-inset-bottom));">
+    <div id="det-tags" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;"></div>
+    <p id="det-memo" style="color:#fff;font-size:15px;line-height:1.5;"></p>
+  </div>
+</div>
+
+<!-- PROFILE MODAL -->
+<div id="profile-modal" style="display:none;position:fixed;inset:0;z-index:200;align-items:flex-end;justify-content:center;">
+  <div class="overlay-bg" onclick="closeProfileModal()"></div>
+  <div style="position:relative;width:100%;max-width:430px;background:var(--c-bg);border-radius:var(--radius-l) var(--radius-l) 0 0;padding:24px 16px calc(24px + env(safe-area-inset-bottom));box-shadow:var(--shadow-modal);animation:slideUp 0.26s ease;">
+    <div style="width:36px;height:4px;background:#e0d4cd;border-radius:2px;margin:0 auto 20px;"></div>
+    <h2 style="font-size:17px;font-weight:700;margin-bottom:18px;">👶 お子さんの情報</h2>
+    <div style="margin-bottom:16px;">
+      <label style="display:block;font-size:13px;font-weight:600;color:var(--c-sub);margin-bottom:5px;">名前</label>
+      <input type="text" id="prof-name" placeholder="例：たろう" maxlength="20" style="width:100%;height:46px;padding:0 12px;border:1.5px solid var(--c-border);border-radius:var(--radius-s);background:var(--c-bg);color:var(--c-text);">
+    </div>
+    <div style="margin-bottom:20px;">
+      <label style="display:block;font-size:13px;font-weight:600;color:var(--c-sub);margin-bottom:5px;">誕生日</label>
+      <input type="date" id="prof-birthday" style="width:100%;height:46px;padding:0 12px;border:1.5px solid var(--c-border);border-radius:var(--radius-s);background:var(--c-bg);color:var(--c-text);">
+    </div>
+    <div id="prof-preview" style="display:none;background:linear-gradient(135deg,#fff7ed,#fde8d2);border-radius:var(--radius-m);padding:14px 16px;margin-bottom:20px;text-align:center;">
+      <p id="prof-preview-name" style="font-size:16px;font-weight:700;"></p>
+      <p id="prof-preview-age"  style="font-size:13px;color:var(--c-sub);margin-top:3px;"></p>
+    </div>
+    <button class="tappable" onclick="saveProfile()" style="width:100%;height:50px;background:var(--c-primary);color:#fff;border:none;border-radius:var(--radius-s);font-size:16px;font-weight:700;">保存する</button>
+  </div>
+</div>
+
+<!-- COMPARE PICKER SHEET -->
+<div id="cmp-sheet" style="display:none;position:fixed;inset:0;z-index:250;align-items:flex-end;justify-content:center;">
+  <div class="overlay-bg" onclick="closeCmpSheet()"></div>
+  <div style="position:relative;width:100%;max-width:430px;background:var(--c-bg);border-radius:var(--radius-l) var(--radius-l) 0 0;padding:20px 0 calc(16px + env(safe-area-inset-bottom));max-height:80dvh;overflow-y:auto;box-shadow:var(--shadow-modal);animation:slideUp 0.26s ease;">
+    <div style="width:36px;height:4px;background:#e0d4cd;border-radius:2px;margin:0 auto 14px;"></div>
+    <p id="cmp-sheet-title" style="font-size:14px;font-weight:700;color:var(--c-text);padding:0 16px;margin-bottom:12px;"></p>
+    <div id="cmp-grid" class="photo-grid-3" style="padding:0 2px;gap:2px;"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ===== STATE ===== */
+const STORE_KEY    = 'osodachi_v3';
+const STORE_KEY_V2 = 'osodachi_v2';
+const haptic = (t='light') => navigator.vibrate?.(t==='heavy'?30:10);
+
+/* HTML エスケープ（XSS防止） */
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
+let state;
+try {
+  const raw = localStorage.getItem(STORE_KEY);
+  if (raw) {
+    state = JSON.parse(raw);
+  } else {
+    /* v2 → v3 マイグレーション */
+    const oldRaw = localStorage.getItem(STORE_KEY_V2);
+    state = oldRaw ? JSON.parse(oldRaw) : {};
+    if (oldRaw) {
+      localStorage.setItem(STORE_KEY, JSON.stringify(state));
+      /* v2は残しておく（安全のため削除しない） */
+    }
+  }
+} catch { state = {}; }
+state.photos  ??= [];
+state.sortAsc ??= false;
+state.profile ??= { name:'', birthday:'' };
+
+const persist = () => {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+  catch(e) {
+    if(e.name==='QuotaExceededError') toast('⚠️ 保存容量が不足しています');
+    else toast('⚠️ 保存できませんでした');
+  }
+};
+
+/* ===== UTILS ===== */
+const toast = (msg, ms=2600) => {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.style.display='block';
+  t.style.animation='none'; void t.offsetWidth;
+  t.style.animation=`toastFade ${ms/1000}s forwards`;
+  setTimeout(()=>t.style.display='none', ms);
+};
+const todayStr = () => new Date().toISOString().slice(0,10);
+const fmtDate  = s => { const[y,m,d]=s.split('-'); return `${y}年${+m}月${+d}日`; };
+const fmtMD    = s => { const[,m,d]=s.split('-'); return `${+m}月${+d}日`; };
+const fmtYM    = s => { const[y,m]=s.split('-'); return `${y}年${+m}月`; };
+const tagEmoji = t => ({初めて:'⭐',日常:'☀️',イベント:'🎉'}[t]||'');
+const yearsAgo = s => new Date().getFullYear() - +s.slice(0,4);
+
+const compressImg = (file,maxPx=900,q=0.76) => new Promise(resolve=>{
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      let w=img.width,h=img.height;
+      if(w>maxPx||h>maxPx){ if(w>h){h=Math.round(h*maxPx/w);w=maxPx;}else{w=Math.round(w*maxPx/h);h=maxPx;} }
+      const c=document.createElement('canvas'); c.width=w; c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      resolve(c.toDataURL('image/jpeg',q));
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+/* ===== AGE CALC ===== */
+function calcAge(birthdayStr,targetStr){
+  if(!birthdayStr) return null;
+  const b=new Date(birthdayStr),t=new Date(targetStr);
+  if(t<b) return null;
+  const totalDays=Math.floor((t-b)/86400000);
+  let years=t.getFullYear()-b.getFullYear(),months=t.getMonth()-b.getMonth();
+  if(months<0){years--;months+=12;} if(t.getDate()<b.getDate()) months--;
+  if(months<0){years--;months+=12;}
+  return {totalDays,years,months};
+}
+function fmtAge(a){
+  if(!a) return '';
+  if(a.totalDays<31) return `生後${a.totalDays}日`;
+  if(a.years===0)    return `生後${a.months}ヶ月`;
+  if(a.months===0)   return `${a.years}歳`;
+  return `${a.years}歳${a.months}ヶ月`;
+}
+const ageAtDate=s=>{ const a=calcAge(state.profile?.birthday,s); return a?fmtAge(a):''; };
+function milestonePills(a){
+  if(!a) return '';
+  const pills=[];
+  if(a.totalDays===100) pills.push('🎉 生後100日！');
+  if(a.years>0&&a.months===0) pills.push(`🎂 ${a.years}歳の誕生日！`);
+  if(a.totalDays<30) pills.push('🍼 新生児期');
+  else if(a.years===0) pills.push('👼 乳児期');
+  else if(a.years<3) pills.push('🐣 幼児期');
+  else pills.push('🧒 幼児期');
+  return pills.map(t=>`<span style="background:rgba(249,115,22,0.12);color:var(--c-primary);font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;">${t}</span>`).join('');
+}
+
+/* ===== PHOTO INPUT ===== */
+let pendingDataUrl=null, selectedTags=[];
+
+const useCamera  = ()=>{ const i=document.getElementById('file-input'); i.setAttribute('capture','camera'); i.click(); };
+const useLibrary = ()=>{ const i=document.getElementById('file-input'); i.removeAttribute('capture'); i.click(); };
+
+async function onFileSelected(input){
+  if(!input.files[0]) return;
+  try{
+    pendingDataUrl=await compressImg(input.files[0]);
+    const img=document.getElementById('preview-img');
+    img.src=pendingDataUrl; img.style.display='block';
+    document.getElementById('photo-ph').style.display='none';
+    const area=document.getElementById('photo-area');
+    area.style.borderStyle='solid'; area.style.borderColor='var(--c-primary)';
+    const btn=document.getElementById('save-btn');
+    btn.disabled=false; btn.textContent='保存する';
+    btn.style.background='var(--c-primary)'; btn.style.color='#fff';
+  }catch{ toast('画像の読み込みに失敗しました'); }
+}
+
+function toggleTag(tag,btn){
+  if(selectedTags.includes(tag)){selectedTags=selectedTags.filter(t=>t!==tag);btn.classList.remove('on');}
+  else{selectedTags.push(tag);btn.classList.add('on');}
+  haptic();
+}
+
+/* ===== ADD MODAL ===== */
+function openAddModal(){
+  pendingDataUrl=null; selectedTags=[];
+  document.getElementById('file-input').value='';
+  document.getElementById('preview-img').style.display='none';
+  document.getElementById('photo-ph').style.display='block';
+  const area=document.getElementById('photo-area');
+  area.style.borderStyle='dashed'; area.style.borderColor='var(--c-border)';
+  document.getElementById('inp-date').value=todayStr();
+  document.getElementById('inp-memo').value='';
+  document.querySelectorAll('#tag-sel .chip').forEach(b=>b.classList.remove('on'));
+  const btn=document.getElementById('save-btn');
+  btn.disabled=true; btn.textContent='写真を選んでください';
+  btn.style.background='#e5d5cc'; btn.style.color='#b8a09a';
+  document.getElementById('add-modal').style.display='flex';
+  document.body.style.overflow='hidden';
+}
+function closeAddModal(){ document.getElementById('add-modal').style.display='none'; document.body.style.overflow=''; }
+
+function savePhoto(){
+  if(!pendingDataUrl){ toast('📷 写真を選択してください'); return; }
+  const btn=document.getElementById('save-btn');
+  btn.disabled=true; btn.textContent='保存中…'; btn.style.opacity='0.6';
+  setTimeout(()=>{
+    state.photos.push({ id:Date.now(), dateStr:document.getElementById('inp-date').value||todayStr(), dataUrl:pendingDataUrl, memo:document.getElementById('inp-memo').value.trim(), tags:[...selectedTags] });
+    persist(); closeAddModal();
+    btn.disabled=false; btn.textContent='保存する'; btn.style.opacity='1';
+    haptic('heavy'); toast('✅ 保存しました！'); render();
+  },80);
+}
+
+/* ===== DETAIL MODAL + 縦スワイプ(閉じる) + 横スワイプ(前後) ===== */
+let currentId = null;
+
+/* 表示順：日付降順（ホームと同じ感覚） */
+const detailList = () => [...state.photos].sort((a,b) => b.dateStr.localeCompare(a.dateStr));
+
+function openDetail(id) {
+  const p = state.photos.find(x => x.id === id); if (!p) return;
+  currentId = id;
+  _fillDetail(p);
+  const modal = document.getElementById('detail-modal');
+  modal.style.transform = 'translateY(0)'; modal.style.opacity = '1'; modal.style.transition = '';
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  haptic();
+}
+
+function _fillDetail(p) {
+  const slide = document.getElementById('det-slide');
+  slide.style.transition = ''; slide.style.transform = 'translateX(0)';
+  document.getElementById('det-img').src = p.dataUrl;
+  document.getElementById('det-date').textContent = fmtDate(p.dateStr);
+  const ag = ageAtDate(p.dateStr);
+  document.getElementById('det-age-badge').textContent = ag ? `（${ag}）` : '';
+  document.getElementById('det-memo').textContent = p.memo || '';
+  document.getElementById('det-tags').innerHTML = p.tags.map(t =>
+    `<span class="chip on" style="font-size:12px;">${tagEmoji(t)} ${t}</span>`).join('');
+
+  /* カウンター & 矢印の表示制御 */
+  const list = detailList();
+  const idx  = list.findIndex(x => x.id === p.id);
+  document.getElementById('det-counter').textContent = `${idx + 1} / ${list.length}`;
+  document.getElementById('det-prev').style.opacity = idx > 0              ? '1' : '0';
+  document.getElementById('det-next').style.opacity = idx < list.length-1  ? '1' : '0';
+  document.getElementById('det-prev').style.pointerEvents = idx > 0              ? 'auto' : 'none';
+  document.getElementById('det-next').style.pointerEvents = idx < list.length-1  ? 'auto' : 'none';
+}
+
+function navigateDetail(dir) {
+  const list = detailList();
+  const idx  = list.findIndex(x => x.id === currentId);
+  const next = list[idx + dir]; if (!next) return;
+
+  /* スライドアニメーション */
+  const slide = document.getElementById('det-slide');
+  const vw    = window.innerWidth;
+  /* 出ていく方向へ */
+  slide.style.transition = 'transform 0.22s ease';
+  slide.style.transform  = `translateX(${dir < 0 ? vw : -vw}px)`;
+
+  setTimeout(() => {
+    currentId = next.id;
+    _fillDetail(next);
+    /* 反対側から瞬間移動して入ってくる */
+    slide.style.transition = 'none';
+    slide.style.transform  = `translateX(${dir < 0 ? -vw : vw}px)`;
+    void slide.offsetWidth; /* reflow */
+    slide.style.transition = 'transform 0.22s ease';
+    slide.style.transform  = 'translateX(0)';
+    haptic();
+  }, 220);
+}
+
+/* ─────────────────────────────────────────────
+   ジェスチャーエンジン
+   ・1本指 × ズームなし → 横スワイプ(前後) / 下スワイプ(閉じる)
+   ・1本指 × ズームあり → パン移動
+   ・2本指             → ピンチズーム
+   ・ダブルタップ       → タップ位置に 2.5x ズーム / 解除
+────────────────────────────────────────────── */
+(()=>{
+  const modal = document.getElementById('detail-modal');
+  const img   = document.getElementById('det-img');
+  const slide = document.getElementById('det-slide');
+
+  /* ── ズーム状態 ── */
+  let scale = 1, panX = 0, panY = 0;
+  const MIN_SCALE = 1, MAX_SCALE = 4;
+
+  /* FIX1: 矢印の正しい表示状態を別途管理 */
+  function _restoreArrows() {
+    const list = detailList();
+    const idx  = list.findIndex(x => x.id === currentId);
+    const prev = document.getElementById('det-prev');
+    const next = document.getElementById('det-next');
+    prev.style.opacity      = idx > 0             ? '1' : '0';
+    next.style.opacity      = idx < list.length-1 ? '1' : '0';
+    prev.style.pointerEvents = idx > 0             ? 'auto' : 'none';
+    next.style.pointerEvents = idx < list.length-1 ? 'auto' : 'none';
+  }
+
+  function applyZoom(s, px, py, animated) {
+    scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
+    panX  = px; panY = py;
+    img.style.transition  = animated ? 'transform 0.25s ease' : 'none';
+    img.style.transform   = `scale(${scale}) translate(${panX}px,${panY}px)`;
+    img.style.transformOrigin = '50% 50%';
+    const zoomed = scale > 1.05;
+    if (zoomed) {
+      /* ズーム中：矢印・カウンターを隠す */
+      ['det-prev','det-next','det-counter'].forEach(id => {
+        document.getElementById(id).style.opacity = '0';
+      });
+    } else {
+      /* FIX1: ズームアウト時は境界状態を正確に復元 */
+      document.getElementById('det-counter').style.opacity = '';
+      _restoreArrows();
+    }
+  }
+
+  function resetZoom(animated) {
+    applyZoom(1, 0, 0, animated);
+  }
+
+  const _origNavigate = navigateDetail;
+  navigateDetail = function(dir2) {
+    resetZoom(false);
+    _origNavigate(dir2);
+  };
+
+  /* パンの範囲クランプ */
+  function clampPan(px, py, s) {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const maxX = (vw * (s - 1)) / (2 * s);
+    const maxY = (vh * (s - 1)) / (2 * s);
+    return [ Math.min(maxX, Math.max(-maxX, px)),
+             Math.min(maxY, Math.max(-maxY, py)) ];
+  }
+
+  /* ── ダブルタップ ── */
+  let lastTap = 0, lastTapX = 0, lastTapY = 0;
+  modal.addEventListener('touchend', e => {
+    if (e.touches.length > 0) return;
+    const t   = e.changedTouches[0];
+    const now = Date.now();
+    /* FIX2: 時間 AND 移動距離で判定（スワイプ後の誤検知を防ぐ） */
+    const moved = Math.hypot(t.clientX - lastTapX, t.clientY - lastTapY);
+    if (now - lastTap < 280 && moved < 20) {
+      lastTap = 0;
+      if (scale > 1.05) {
+        resetZoom(true);
+      } else {
+        const vw = window.innerWidth, vh = window.innerHeight;
+        const ox = (t.clientX - vw / 2) / 2.5;
+        const oy = (t.clientY - vh / 2) / 2.5;
+        const [cx2, cy2] = clampPan(-ox, -oy, 2.5);
+        applyZoom(2.5, cx2, cy2, true);
+        haptic();
+      }
+    } else {
+      lastTap  = now;
+      lastTapX = t.clientX;
+      lastTapY = t.clientY;
+    }
+  }, { passive: true });
+
+  /* ── ピンチ & パン & スワイプ ── */
+  let startScale = 1, startPanX = 0, startPanY = 0;
+  let sx = 0, sy = 0, cx = 0, cy = 0, dir = null;
+  let startDist = 0;
+
+  const dist = (t1, t2) => Math.hypot(t1.clientX-t2.clientX, t1.clientY-t2.clientY);
+
+  modal.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      startDist  = dist(e.touches[0], e.touches[1]);
+      startScale = scale; startPanX = panX; startPanY = panY;
+      dir = 'pinch';
+    } else if (e.touches.length === 1) {
+      sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+      startPanX = panX; startPanY = panY;
+      cx = 0; cy = 0; dir = null;
+    }
+  }, { passive: true });
+
+  modal.addEventListener('touchmove', e => {
+    if (e.touches.length === 2) {
+      dir = 'pinch';
+      const newDist  = dist(e.touches[0], e.touches[1]);
+      const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, startScale * (newDist / startDist)));
+      const [px, py] = clampPan(startPanX, startPanY, newScale);
+      applyZoom(newScale, px, py, false);
+      return;
+    }
+    if (e.touches.length !== 1) return;
+    cx = e.touches[0].clientX - sx;
+    cy = e.touches[0].clientY - sy;
+
+    if (scale > 1.05) {
+      dir = 'pan';
+      const [px, py] = clampPan(startPanX + cx / scale, startPanY + cy / scale, scale);
+      applyZoom(scale, px, py, false);
+      return;
+    }
+
+    if (!dir && (Math.abs(cx) > 10 || Math.abs(cy) > 10)) {
+      dir = Math.abs(cx) > Math.abs(cy) ? 'h' : 'v';
+    }
+    if (dir === 'h') {
+      const list = detailList(), idx = list.findIndex(x => x.id === currentId);
+      const blocked = (cx < 0 && idx >= list.length-1) || (cx > 0 && idx <= 0);
+      slide.style.transition = 'none';
+      slide.style.transform  = `translateX(${blocked ? cx * 0.18 : cx}px)`;
+    } else if (dir === 'v' && cy > 0) {
+      modal.style.transition = 'none';
+      modal.style.transform  = `translateY(${cy}px)`;
+    }
+  }, { passive: true });
+
+  modal.addEventListener('touchend', e => {
+    if (dir === 'pinch') { dir = null; return; }
+    if (dir === 'pan')   { dir = null; return; }
+    if (dir === 'h') {
+      const threshold = window.innerWidth * 0.30;
+      if      (cx < -threshold) navigateDetail(1);
+      else if (cx >  threshold) navigateDetail(-1);
+      else {
+        slide.style.transition = 'transform 0.22s ease';
+        slide.style.transform  = 'translateX(0)';
+      }
+    } else if (dir === 'v') {
+      if (cy > 80) closeDetail();
+      else {
+        modal.style.transition = 'transform 0.2s ease';
+        modal.style.transform  = 'translateY(0)';
+        setTimeout(() => modal.style.transition = '', 200);
+      }
+    }
+    dir = null;
+  }, { passive: true });
+
+  /* closeDetail 時にズームをリセット */
+  const _origClose = closeDetail;
+  closeDetail = function() {
+    resetZoom(false);
+    _origClose();
+  };
+})();
+
+function closeDetail(){
+  const m=document.getElementById('detail-modal');
+  m.style.transition='transform 0.22s ease,opacity 0.22s ease';
+  m.style.transform='translateY(100%)'; m.style.opacity='0';
+  setTimeout(()=>{ m.style.display='none'; m.style.transform=''; m.style.opacity=''; m.style.transition=''; document.body.style.overflow=''; },220);
+}
+function deletePhoto(){
+  if(!confirm('この写真を削除しますか？')) return;
+  state.photos=state.photos.filter(p=>p.id!==currentId);
+  persist(); closeDetail(); haptic('heavy'); toast('🗑️ 削除しました'); render();
+}
+
+/* ===== PROFILE MODAL ===== */
+function openProfileModal(){
+  document.getElementById('prof-name').value=state.profile.name||'';
+  document.getElementById('prof-birthday').value=state.profile.birthday||'';
+  updateProfPreview();
+  document.getElementById('profile-modal').style.display='flex';
+  document.body.style.overflow='hidden';
+}
+function closeProfileModal(){ document.getElementById('profile-modal').style.display='none'; document.body.style.overflow=''; }
+function saveProfile(){
+  state.profile={ name:document.getElementById('prof-name').value.trim(), birthday:document.getElementById('prof-birthday').value };
+  persist(); closeProfileModal(); haptic('heavy'); toast('✅ 保存しました！'); render();
+}
+function updateProfPreview(){
+  const name=document.getElementById('prof-name').value.trim();
+  const bday=document.getElementById('prof-birthday').value;
+  const prev=document.getElementById('prof-preview');
+  if(!name&&!bday){prev.style.display='none';return;}
+  prev.style.display='block';
+  document.getElementById('prof-preview-name').textContent=name?`${name} ちゃん`:'';
+  if(bday){
+    const age=calcAge(bday,todayStr());
+    document.getElementById('prof-preview-age').textContent=age?`今日で ${fmtAge(age)}（生後${age.totalDays}日）`:'誕生日が未来の日付です';
+  } else { document.getElementById('prof-preview-age').textContent=''; }
+}
+document.addEventListener('input',e=>{ if(e.target.id==='prof-name'||e.target.id==='prof-birthday') updateProfPreview(); });
+
+/* ===== SORT / FILTER ===== */
+let curFilter='all';
+function toggleSort(){ state.sortAsc=!state.sortAsc; persist(); document.getElementById('sort-btn').textContent=state.sortAsc?'古い順 ▾':'新しい順 ▾'; renderTimeline(); haptic(); }
+function setFilter(f,btn){ curFilter=f; document.querySelectorAll('[data-flt]').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); renderTimeline(); haptic(); }
+const sorted=()=>[...state.photos].sort((a,b)=>state.sortAsc?a.dateStr.localeCompare(b.dateStr):b.dateStr.localeCompare(a.dateStr));
+
+/* ===== PAGES ===== */
+let curPage='home';
+function showPage(page){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById(`page-${page}`).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.page===page));
+  curPage=page;
+  document.getElementById('sort-btn').style.display=page==='timeline'?'block':'none';
+  const fab=document.getElementById('fab');
+  if(page==='compare'){ fab.style.opacity='0'; fab.style.transform='scale(0.8)'; fab.style.pointerEvents='none'; }
+  else{ fab.style.opacity='1'; fab.style.transform='scale(1)'; fab.style.pointerEvents='auto'; }
+  render();
+}
+
+/* ===== RENDER ===== */
+function render(){
+  renderHome();
+  if(curPage==='timeline') renderTimeline();
+  if(curPage==='compare')  renderCompare();
+  document.getElementById('sort-btn').textContent=state.sortAsc?'古い順 ▾':'新しい順 ▾';
+}
+
+function renderHome(){
+  const prof=state.profile, hasProfile=prof&&(prof.name||prof.birthday);
+  document.getElementById('profile-card').style.display=hasProfile?'block':'none';
+  document.getElementById('profile-nudge').style.display=hasProfile?'none':'flex';
+
+  if(hasProfile){
+    const name=prof.name||'お子さん';
+    document.getElementById('pc-name').textContent=`${name} ちゃん`;
+    if(prof.birthday){
+      const age=calcAge(prof.birthday,todayStr());
+      if(age){
+        document.getElementById('pc-age-main').textContent=`${fmtDate(prof.birthday)} 生まれ`;
+        document.getElementById('pc-days').textContent=age.totalDays.toLocaleString();
+        document.getElementById('pc-days-lbl').textContent='日目';
+        document.getElementById('pc-milestones').innerHTML=milestonePills(age);
+      }else{
+        document.getElementById('pc-age-main').textContent=`${fmtDate(prof.birthday)} 生まれ予定`;
+        ['pc-days','pc-days-lbl'].forEach(id=>document.getElementById(id).textContent='');
+        document.getElementById('pc-milestones').innerHTML='';
+      }
+    }else{
+      ['pc-age-main','pc-days','pc-days-lbl'].forEach(id=>document.getElementById(id).textContent='');
+      document.getElementById('pc-milestones').innerHTML='';
+    }
+    document.getElementById('header-title').textContent=`${prof.name||'お子さん'}のノート`;
+  }else{
+    document.getElementById('header-title').textContent='おそだちノート';
+  }
+
+  const today=todayStr(),mmdd=today.slice(5),thisY=+today.slice(0,4);
+  const memories=[...state.photos].filter(p=>p.dateStr.slice(5)===mmdd&&+p.dateStr.slice(0,4)<thisY).sort((a,b)=>b.dateStr.localeCompare(a.dateStr));
+  const memEl=document.getElementById('home-memory');
+  memEl.innerHTML=memories.length?`<div class="memory-strip">
+    <div style="font-size:12px;font-weight:700;color:#b45309;letter-spacing:0.03em;margin-bottom:10px;display:flex;align-items:center;gap:6px;"><span style="font-size:16px;">✨</span><span>${fmtMD(today)}の思い出</span></div>
+    <div class="memory-scroll">${memories.map(p=>`<div class="memory-card" onclick="openDetail(${p.id})"><img src="${p.dataUrl}" loading="lazy" alt="思い出"><div class="memory-badge">${yearsAgo(p.dateStr)}年前</div></div>`).join('')}</div>
+  </div>`:'';
+
+  if(state.photos.length>0){
+    const days=new Set(state.photos.map(p=>p.dateStr)).size, months=new Set(state.photos.map(p=>p.dateStr.slice(0,7))).size;
+    document.getElementById('stat-total').textContent=state.photos.length;
+    document.getElementById('stat-days').textContent=days;
+    document.getElementById('stat-months').textContent=months;
+    document.getElementById('home-stats').style.display='block';
+  }else{ document.getElementById('home-stats').style.display='none'; }
+
+  const recent=[...state.photos].sort((a,b)=>b.dateStr.localeCompare(a.dateStr)).slice(0,8);
+  const grid=document.getElementById('home-grid'), empty=document.getElementById('home-empty'), seeAll=document.getElementById('see-all-btn');
+  if(!recent.length){ grid.innerHTML=''; empty.style.display='block'; seeAll.style.display='none'; return; }
+  empty.style.display='none';
+  seeAll.style.display=state.photos.length>8?'block':'none';
+  grid.innerHTML=recent.map(p=>`
+    <div class="photo-item tappable" onclick="openDetail(${p.id})">
+      <img src="${p.dataUrl}" loading="lazy" alt="写真">
+      ${p.memo?`<div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,0.6));padding:6px 8px;"><p style="color:#fff;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(p.memo)}</p></div>`:''}
+      ${p.tags.length?`<div style="position:absolute;top:6px;left:6px;"><span style="background:rgba(249,115,22,0.88);color:#fff;font-size:11px;padding:3px 7px;border-radius:6px;font-weight:600;">${tagEmoji(p.tags[0])}</span></div>`:''}
+      <div style="position:absolute;bottom:${p.memo?'26px':'6px'};right:6px;"><span style="background:rgba(0,0,0,0.35);color:#fff;font-size:10px;padding:2px 6px;border-radius:4px;">${fmtMD(p.dateStr)}</span></div>
+    </div>`).join('');
+}
+
+function renderTimeline(){
+  let photos=sorted();
+  if(curFilter!=='all') photos=photos.filter(p=>p.tags.includes(curFilter));
+  const list=document.getElementById('tl-list'),empty=document.getElementById('tl-empty');
+  if(!photos.length){list.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';
+  const groups={};
+  photos.forEach(p=>{ const ym=p.dateStr.slice(0,7); (groups[ym]||(groups[ym]=[])).push(p); });
+  const ymKeys=Object.keys(groups).sort((a,b)=>state.sortAsc?a.localeCompare(b):b.localeCompare(a));
+  list.innerHTML=ymKeys.map(ym=>{
+    const cnt=groups[ym].length;
+    const cards=groups[ym].map(p=>{
+      const [y,m,d]=p.dateStr.split('-'), ageStr=state.profile?.birthday?ageAtDate(p.dateStr):'';
+      return `<div class="tl-card tappable" onclick="openDetail(${p.id})">
+        <img class="tl-img" src="${p.dataUrl}" loading="lazy" alt="写真">
+        <div style="padding:10px 14px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;${(p.memo||p.tags.length||ageStr)?'margin-bottom:6px;':''}">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span style="font-size:13px;font-weight:600;color:var(--c-sub);">${y}年${+m}月${+d}日</span>
+              ${ageStr?`<span style="font-size:11px;background:var(--c-primary-l);color:var(--c-primary);padding:2px 8px;border-radius:10px;font-weight:600;">${ageStr}</span>`:''}
+            </div>
+            <div style="display:flex;gap:4px;flex-shrink:0;">${p.tags.map(t=>`<span style="font-size:11px;background:var(--c-warm);color:var(--c-primary);padding:2px 8px;border-radius:10px;font-weight:600;">${tagEmoji(t)} ${t}</span>`).join('')}</div>
+          </div>
+          ${p.memo?`<p style="font-size:14px;color:var(--c-text);line-height:1.5;">${esc(p.memo)}</p>`:''}
+        </div>
+      </div>`;
+    }).join('');
+    return `<div class="month-hd">${fmtYM(ym+'-01')} <span style="font-weight:400;margin-left:4px;font-size:12px;">${cnt}枚</span></div>${cards}`;
+  }).join('');
+}
+
+function renderCompare(){
+  document.getElementById('cmp-empty').style.display=state.photos.length?'none':'block';
+  /* FIX4: 削除された写真がスロットに残っていたらクリア */
+  [0, 1].forEach(i => {
+    if (cmpSel[i] && !state.photos.find(p => p.id === cmpSel[i].id)) {
+      clearCmp(i);
+    }
+  });
+}
+
+/* ===== COMPARE PICKER ===== */
+let cmpSel=[null,null],cmpSlot=0;
+function openCmpPicker(slot){
+  cmpSlot=slot;
+  if(!state.photos.length){toast('まだ写真が登録されていません');return;}
+  document.getElementById('cmp-sheet-title').textContent=slot===0?'1枚目を選んでください':'2枚目を選んでください';
+  const photos=[...state.photos].sort((a,b)=>b.dateStr.localeCompare(a.dateStr));
+  document.getElementById('cmp-grid').innerHTML=photos.map(p=>`
+    <div class="photo-item tappable" onclick="pickCmp(${p.id})" style="${cmpSel[slot]?.id===p.id?'outline:3px solid var(--c-primary);outline-offset:-3px;':''}">
+      <img src="${p.dataUrl}" loading="lazy" alt="写真">
+      <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.45);padding:3px 5px;"><p style="color:#fff;font-size:9px;text-align:center;">${fmtMD(p.dateStr)}</p></div>
+    </div>`).join('');
+  document.getElementById('cmp-sheet').style.display='flex';
+  document.body.style.overflow='hidden';
+}
+function closeCmpSheet(){ document.getElementById('cmp-sheet').style.display='none'; document.body.style.overflow=''; }
+
+function pickCmp(id){
+  const p=state.photos.find(x=>x.id===id); if(!p) return;
+  /* 同じ写真を両スロットに選ばせない */
+  const otherSlot = cmpSlot === 0 ? 1 : 0;
+  if(cmpSel[otherSlot]?.id === id){ toast('⚠️ 同じ写真は選べません'); return; }
+  cmpSel[cmpSlot]=p;
+  const slot=document.getElementById(`cslot-${cmpSlot}`);
+  slot.classList.add('filled'); slot.onclick=null;
+  slot.innerHTML=`<img src="${p.dataUrl}" style="width:100%;height:100%;object-fit:cover;" alt="写真">
+    <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.52);padding:6px;text-align:center;">
+      <span style="color:#fff;font-size:11px;font-weight:600;">${fmtDate(p.dateStr)}</span>
+      ${state.profile?.birthday?`<span style="display:block;color:rgba(255,255,255,0.75);font-size:10px;">${ageAtDate(p.dateStr)}</span>`:''}
+    </div>
+    <button onclick="clearCmp(${cmpSlot});event.stopPropagation();" aria-label="解除" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.5);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:14px;display:flex;align-items:center;justify-content:center;">✕</button>`;
+  closeCmpSheet(); haptic(); updateCmpResult();
+}
+
+function clearCmp(slot){
+  cmpSel[slot]=null;
+  const el=document.getElementById(`cslot-${slot}`);
+  el.classList.remove('filled');
+  el.innerHTML=`<div style="text-align:center;color:var(--c-sub);padding:16px;"><div style="font-size:36px;margin-bottom:6px;color:var(--c-border);">＋</div><p style="font-size:12px;font-weight:600;">${slot===0?'1枚目':'2枚目'}</p></div>`;
+  el.onclick=()=>openCmpPicker(slot);
+  /* 片方でも空になったら結果を隠す */
+  document.getElementById('cmp-result').style.display='none';
+  haptic();
+}
+
+/* Escキー / ブラウザバックでモーダルを閉じる */
+document.addEventListener('keydown', e => {
+  if(e.key !== 'Escape') return;
+  if(document.getElementById('cmp-sheet').style.display    === 'flex') { closeCmpSheet();    return; }
+  if(document.getElementById('profile-modal').style.display === 'flex') { closeProfileModal(); return; }
+  if(document.getElementById('add-modal').style.display     === 'flex') { closeAddModal();    return; }
+  if(document.getElementById('detail-modal').style.display  === 'flex') { closeDetail();      return; }
+});
+
+function updateCmpResult(){
+  if(!cmpSel[0]||!cmpSel[1]) return;
+  const d0=new Date(cmpSel[0].dateStr),d1=new Date(cmpSel[1].dateStr);
+  const days=Math.abs(Math.round((d1-d0)/86400000));
+  const years=Math.floor(days/365),months=Math.floor((days%365)/30),rem=days%30;
+  let label='';
+  if(years>0)label+=`${years}歳`; if(months>0)label+=`${months}ヶ月`;
+  if(!years&&!months)label=`${rem}日`;
+  label+='分の成長';
+  document.getElementById('cmp-diff-val').textContent=label;
+  const older=d0<d1?cmpSel[0]:cmpSel[1],newer=d0<d1?cmpSel[1]:cmpSel[0];
+  document.getElementById('cmp-dates-val').textContent=`${fmtDate(older.dateStr)} → ${fmtDate(newer.dateStr)}`;
+  document.getElementById('cmp-result').style.display='block';
+}
+
+/* ===== INIT ===== */
+render();
+</script>
+</body>
+</html>
