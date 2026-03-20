@@ -488,12 +488,29 @@ const toast = (msg, ms=2600) => {
   t.style.animation=`toastFade ${ms/1000}s forwards`;
   setTimeout(()=>t.style.display='none', ms);
 };
-const todayStr = () => new Date().toISOString().slice(0,10);
+/* toISOString() はUTCを返すため JST深夜0〜9時に日付がずれる → ローカル日付で取得 */
+const todayStr = () => {
+  const d = new Date();
+  return [
+    d.getFullYear(),
+    String(d.getMonth()+1).padStart(2,'0'),
+    String(d.getDate()).padStart(2,'0')
+  ].join('-');
+};
 const fmtDate  = s => { const[y,m,d]=s.split('-'); return `${y}年${+m}月${+d}日`; };
 const fmtMD    = s => { const[,m,d]=s.split('-'); return `${+m}月${+d}日`; };
 const fmtYM    = s => { const[y,m]=s.split('-'); return `${y}年${+m}月`; };
+/* 年の差だけでなく月日も考慮して正確な「○年前」を計算 */
+const yearsAgo = s => {
+  const today = todayStr();
+  const [py,pm,pd] = s.split('-').map(Number);
+  const [ty,tm,td] = today.split('-').map(Number);
+  let y = ty - py;
+  if (tm < pm || (tm === pm && td < pd)) y--;
+  return y;
+};
+
 const tagEmoji = t => ({初めて:'⭐',日常:'☀️',イベント:'🎉'}[t]||'');
-const yearsAgo = s => new Date().getFullYear() - +s.slice(0,4);
 
 const compressImg = (file,maxPx=900,q=0.76) => new Promise(resolve=>{
   const reader=new FileReader();
